@@ -3,7 +3,13 @@
 
 import numpy
 from scipy.io import loadmat # to load Matlab files
+from pathlib import Path
 import neurokit2 as nk       # not really used
+import HR_tools as HRt
+
+from numpy.random import default_rng # for random numbers generation (new mmethod)
+rng = default_rng() # https://numpy.org/doc/stable/reference/random/index.html
+
 
 # Import raw peaks from the mat files
 data_path ='/Users/ngarnier/Documents/research/data/2021-mother-fetus' # macos
@@ -215,13 +221,13 @@ def load_couple(i, fs=1000, noise_level=0.25, do_fix_peaks=0, do_filter=1, quant
     
     # Convert to HR or RRI
     if (quantity=="HR"):
-        fhr = peaks_to_HR(fp_clean, sampling_rate=1000, data_length=ending_time)
-        mhr = peaks_to_HR(mp_clean, sampling_rate=1000, data_length=ending_time)
+        fhr = HRt.peaks_to_HR(fp_clean, sampling_rate=1000, data_length=ending_time)
+        mhr = HRt.peaks_to_HR(mp_clean, sampling_rate=1000, data_length=ending_time)
 #    print("[load_couple]: fHR has shape", fhr.shape)
         full_output=numpy.array([fhr[starting_time:], mhr[starting_time:]], dtype=float)
     elif (quantity=="RRI"):
-        frri = peaks_to_RRI(fp_clean, sampling_rate=1000, data_length=ending_time, interpolate=True)
-        mrri = peaks_to_RRI(mp_clean, sampling_rate=1000, data_length=ending_time, interpolate=True)
+        frri = HRt.peaks_to_RRI(fp_clean, sampling_rate=1000, data_length=ending_time, interpolate=True)
+        mrri = HRt.peaks_to_RRI(mp_clean, sampling_rate=1000, data_length=ending_time, interpolate=True)
 #    print("[load_couple]: fRRI has shape", frri.shape)
         full_output=numpy.array([frri[starting_time:], mrri[starting_time:]], dtype=float)
     
@@ -230,7 +236,7 @@ def load_couple(i, fs=1000, noise_level=0.25, do_fix_peaks=0, do_filter=1, quant
             print("warning! I couldn't get simply your required sampling rate %d", fs)
             print("\t use a divisor of the initial value 1000")
         else:
-            full_output=causality_tools.filter_FIR(full_output, 1000//fs)
+            full_output=HRt.filter_FIR(full_output, 1000//fs)
         
     full_output += rng.standard_normal(full_output.shape)*noise_level
     

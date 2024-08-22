@@ -84,6 +84,7 @@ def compute_HR_entropy_rate(data, stride_values, mask=None, N_shuffles=0, do_fil
 #
 # returns 3 arrays in the following order:
 # h, h_std (the std), h_bias (the bias)
+# and an extra 4th array with confidence index, if asked for (parameter "do_confidence" set to 1)
 #
 def compute_window_HR_entropy_rate(data, stride, T=300, overlap=0, fs=20, mask=None, N_shuffles=0, 
                                    do_symb=False, do_return_time=1, do_filter=False, do_confidence=False):
@@ -150,3 +151,74 @@ def compute_window_HR_entropy_rate(data, stride, T=300, overlap=0, fs=20, mask=N
     else:
         if do_confidence:   return h, h_std, h_bias, confid 
         else:               return h, h_std, h_bias
+
+
+
+# to compute ApEn/SampEn from HR data, over a range of time-scales
+# data      : a 1d numpy array with the data
+# stride    : array of stride values to consider
+# N_shuffles: nb of shuffles to perform and average over (default=0)
+# do_filter : filter (FIR) the signal or not
+# fs_in     : sampling frequency of input data
+#             fs_in = 1000 for ECG-derived HR
+#             fs_in = 5    for device produced RRI, and infered HR
+# fs_out    : effective sampling frequency after filtering
+#             fs_out = 20 is a good compromise to have enough points
+#
+# returns 3 or 4 arrays in the following order:
+# h, h_std (the std), h_bias (the bias)
+#
+# N.B.G. 2024/04/05
+def compute_HR_complexities(data, stride_values, mask=None, N_shuffles=0, do_filter=False, fs_in=1000, fs_out=20, do_what="SampEn"):
+    s = data.shape
+    if len(s)==1: x = tools.reorder(data)
+    else:         x = tools.reorder(data[0])   
+    
+    if isinstance(mask, np.ndarray):
+        print("mask not implemented")
+        return
+        
+    h     =np.zeros(stride_values.shape, dtype=float)
+    h_std =np.zeros(stride_values.shape, dtype=float)
+    h_bias=np.zeros(stride_values.shape, dtype=float)
+    h0    =np.zeros(stride_values.shape, dtype=float)  # the effect of the std / normalization
+    
+    i=0
+    for stride in stride_values:   
+        # filtering 
+        if (do_filter==True):
+            fs_in = fs
+            fs_out= fs
+            if isinstance(mask, np.ndarray):
+                data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride, mask=mask)
+                mask = mask[(stride-1)//2:(-stride+1)//2]
+            else:
+                data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride)
+#            print("stride", stride, x.shape, "vs", data2.shape)
+            x = data2.copy()
+        std = np.std(x)
+        h0[i] = np.log(std)
+          
+        
+        h[i]   = entropy.compute_entropy_rate(x, stride=stride)
+                
+        [h_std[i]] = entropy.get_last_info()[:1]
+    
+        # bias estimate with shuffling:
+        if (N_shuffles>0):
+            for i_shuffle in np.arange(N_shuffles):
+                x_shuffled = entropy.surrogate(x)
+        
+                if isinstance(mask, np.ndarray):
+                    h_bias[i]+=entropy.compute_entropy_rate(x_shuffled, stride=stride, mask=mask)
+                    h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride, mask=mask)
+                else:
+                    h_bias[i]+=entropy.compute_entropy_rate(x_shuffled, stride=stride)
+                    h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride)
+
+            h_bias[i]/=N_shuffles
+            
+        i+=1
+    
+    return h, h_std, h_bias, h0 
+
