@@ -64,7 +64,7 @@ def RRI_to_HR(rri, sampling_rate=20, rri_sampling_rate=1000, data_length=-1):
     
     hr = numpy.zeros(data_length, dtype=float)
     for i in numpy.arange(numpy.size(rri)-1):
-        hr[(int)(i*sampling_rate/rri_sampling_rate):(i+1)*int(sampling_rate/rri_sampling_rate)] = 60*1000/rri[i]  # in bpm
+        hr[(int)(i*sampling_rate/rri_sampling_rate):int((i+1)*sampling_rate/rri_sampling_rate)] = 60*1000/rri[i]  # in bpm
     return hr
 
 
