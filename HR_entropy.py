@@ -148,18 +148,30 @@ def compute_window_HR_entropy_rate(data, stride, T=300, overlap=0, fs=20, mask=N
                 x_shuffled = entropy.surrogate(x[:,i_start:i_end])  # Shuffle 
         
                 if isinstance(mask, np.ndarray):
-                    h_bias[i]+=entropy.compute_entropy_rate(x_shuffled, stride=stride, mask=mask[i_start:i_end])
-                    h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride, mask=mask[i_start:i_end])
-                else:
-                    h_bias[i]+=entropy.compute_entropy_rate(x_shuffled, stride=stride) 
-                    h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride)
+                    if do_what=="entropy":
+                        h_bias[i]+=entropy.compute_entropy_rate(x_shuffled, stride=stride, mask=mask[i_start:i_end])
+                        h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride, mask=mask[i_start:i_end])
+                    elif do_what=="complex":
+                        a,b  = entropy.compute_complexities(x[:,i_start:i_end], stride=stride, mask=mask[i_start:i_end])
+                        h_bias[i]  += a[-1] # ApEn
+                        h2_bias[i] += b[-1] # SampEn
 
-            h_bias[i]/=N_shuffles
+                else:
+                    if do_what=="entropy":
+                        h_bias[i]+=entropy.compute_entropy_rate(x_shuffled, stride=stride) 
+                        h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride)
+                    elif do_what=="complex":
+                        a,b = entropy.compute_complexities(x[:,i_start:i_end], stride=stride)
+                        h_bias[i]  = a[-1] 
+                        h2_bias[i] = b[-1]
+
+            h_bias[i] /=N_shuffles
+            h2_bias[i]/=N_shuffles
     
     if do_what=="entropy":
         returned_variables = [h, h_std, h_bias]
     elif do_what=="complex":    # as of 2024/08/29, bias is only computed for entropy rate, not for complexities
-        returned_variables = [h, h2, h_std]
+        returned_variables = [h, h2, h_std, h_bias, h2_bias]
             
     if (do_return_time==1): 
         returned_variables.append(t)
