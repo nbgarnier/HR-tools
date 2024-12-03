@@ -17,4 +17,7 @@ import the module(s) as wanted, to use the function(s)
 
 # examples
 
+in the directory examples are several example Jupyter notebooks:
 
+- a (to-do)
+- b (to-do)
