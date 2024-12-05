@@ -17,12 +17,12 @@ import the module(s) as wanted, to use the function(s)
 
 # examples
 
-in the directory examples are several example Jupyter notebooks:
+in the directory examples/ are several example Jupyter notebooks:
 
 - ECG_RRI_HR.ipynb : shows how to:
   * load RRI data or raw ECG data
   * convert raw ECG data into peaks timestamps data
   * convert peaks data into RRI data
-  * converrt RRI data into HR data
+  * convert RRI data into HR data
     
 - b (to-do)
