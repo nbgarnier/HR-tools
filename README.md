@@ -19,5 +19,10 @@ import the module(s) as wanted, to use the function(s)
 
 in the directory examples are several example Jupyter notebooks:
 
-- a (to-do)
+- ECG_RRI_HR.ipynb : shows how to:
+  * load RRI data or raw ECG data
+  * convert raw ECG data into peaks timestamps data
+  * convert peaks data into RRI data
+  * converrt RRI data into HR data
+    
 - b (to-do)
