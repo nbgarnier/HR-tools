@@ -22,6 +22,23 @@ import entropy.tools as tools
 #
 # N.B.G. 2024/04/05
 def compute_HR_entropy_rate(data, stride_values, mask=None, N_shuffles=0, do_filter=False, fs_in=1000, fs_out=20):
+    ''' compute entropy rate of (HR or any type of) data, over a range of time-scales
+
+    input parameters:
+      data      : a 1d numpy array with the data
+      stride    : array of stride values (timescales) to consider (in points)
+      N_shuffles: nb of shuffles to perform and average over (default=0)
+      do_filter : filter (FIR) the signal or not
+      fs_in     : sampling frequency of input data
+                  fs_in = 1000 for ECG-derived HR
+                  fs_in = 5    for device produced RRI, and infered HR
+      fs_out    : effective sampling frequency after filtering
+                  fs_out = 20 is a good compromise to have enough points
+
+    returns 4 arrays in the following order:
+      h, h_std (the std), h_bias (the bias) and h0 (the entropy normalization due to the standard deviation)
+    '''
+    
     s = data.shape
     if len(s)==1: x = tools.reorder(data)
     else:         x = tools.reorder(data[0])   
@@ -88,6 +105,22 @@ def compute_HR_entropy_rate(data, stride_values, mask=None, N_shuffles=0, do_fil
 #
 def compute_window_HR_entropy_rate(data, stride, T=300, overlap=0, fs=20, mask=None, N_shuffles=0, 
                                    do_what="entropy", do_return_time=1, do_filter=False, do_confidence=False):
+    ''' compute entropy rate of (HR or any type of) data, in sliding windows, over a single time-scale
+
+    input parameters:
+      data      : a 1d numpy array with the HR data
+      stride    : the stride value, i.e., the timescale to consider (in points)
+      T         : the window size (in points)
+      overlap   : the overlap between 2 consecutive windows (in points)
+      fs        : the sampling frequency (Hz) for data
+      N_shuffles: nb of shuffles to perform and average over (default=0)
+      do_return_time : if ==1, then returns an extra vector with timestamps of the centers of time windows
+    
+    returns 3 arrays in the following order:
+        h, h_std (the std), h_bias (the bias)
+    and if asked for (parameter "do_confidence" set to 1) an extra 4th array with confidence index
+    '''
+    
     s = data.shape
     if len(s)==1: x = tools.reorder(data)
     else:         x = tools.reorder(data[0])
@@ -100,6 +133,7 @@ def compute_window_HR_entropy_rate(data, stride, T=300, overlap=0, fs=20, mask=N
     h2     = np.zeros(N_windows, dtype=float) # for a second measure (SampEn or top of ApEn if "complexities)
     h_std  = np.zeros(N_windows, dtype=float)
     h_bias = np.zeros(N_windows, dtype=float)
+    h2_bias= np.zeros(N_windows, dtype=float)
     t      = np.zeros(N_windows, dtype=float)
     confid = np.zeros(N_windows, dtype=float)
 

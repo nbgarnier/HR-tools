@@ -12,6 +12,16 @@ import numpy
 # returns:
 #     RRI     (either time-driven or with constant sampling, depending on "do_interpolate")
 def peaks_to_RRI(peaks, sampling_rate=1000, data_length=-1, interpolate=False):
+    ''' compute RRI signal from a series of peaks timestamps    
+    
+    input parameters:
+      peaks           : contains peaks timestamps
+      sampling_rate   : the sampling rate of peaks 
+      data_length     : max size (in time) of the output
+      do_interpolate  : (boolean) returns a RRI with a constant sampling rate
+    returns:
+      RRI     (either time-driven or with constant sampling, depending on "do_interpolate")
+    '''
     if (data_length==-1): data_length = numpy.max(peaks)
     
     rri = numpy.diff(peaks) / sampling_rate 
@@ -35,10 +45,17 @@ def peaks_to_RRI(peaks, sampling_rate=1000, data_length=-1, interpolate=False):
 # returns: 
 #    HR, an array (of appropriate length) with the HR signal, in bpm, and with constant sampling frequency
 def peaks_to_HR(peaks, sampling_rate=1000, data_length=-1):
-#    print("[peaks_to_HR] : ",data_length, numpy.max(peaks))
+    ''' compute HR signal from a series of peaks timestamps
+    
+    input parameters:
+      peaks          : array of indexes where a peak is observed/measured
+      sampling_rate  : obvious, in Hertz
+      data_length    : max size (in time) of the output
+    returns: 
+      HR, an array (of appropriate length) with the HR signal, in bpm, and with constant sampling frequency
+    '''
     if (data_length==-1): data_length = numpy.max(peaks)
     rri = numpy.diff(peaks)/sampling_rate
-#    print("[peaks_to_HR] : length =",data_length)
     
     hr = numpy.zeros(data_length, dtype=float)
     for i in numpy.arange(peaks.size-1):
@@ -56,11 +73,18 @@ def peaks_to_HR(peaks, sampling_rate=1000, data_length=-1):
 # returns:
 #    HR  
 def RRI_to_HR(rri, sampling_rate=20, rri_sampling_rate=1000, data_length=-1):
-#    print("[peaks_to_HR] : ",data_length, numpy.max(peaks))
+    ''' converts RRI data into HR data
+    
+    input parameters:
+      rri                 : the RRI data
+      sampling_rate       : the HR (output) sampling rate (default 20)
+      rri_sampling_rate   : the RRI sampling rate (default 1000)
+      data_length         : how long the output will be (-1 for all data)
+    returns:
+      HR, sampled at sampling_rate
+    '''
     if (data_length==-1): 
         data_length = (int)(numpy.size(rri)*sampling_rate/rri_sampling_rate)
-#    rri = numpy.diff(peaks)/ECG_sampling_rate
-#    print("[peaks_to_HR] : length =",data_length)
     
     hr = numpy.zeros(data_length, dtype=float)
     for i in numpy.arange(numpy.size(rri)-1):
@@ -69,9 +93,41 @@ def RRI_to_HR(rri, sampling_rate=20, rri_sampling_rate=1000, data_length=-1):
 
 
 
+# converts RRI data into another RRI data, with (usually larger) new sampling rate
+# NBG, 2024/08/29
+# input parameters:
+#    rri                 : the input RRI data
+#    sampling_rate       : the output sampling rate (default 20)
+#    rri_sampling_rate   : the RRI sampling rate (default 1000)
+#    data_length         : how long the output will be (-1 for all data)
+# returns:
+#    rri
+def RRI_to_RRI(rri, sampling_rate=20, rri_sampling_rate=1000, data_length=-1):
+    ''' converts RRI data into another RRI data, with (usually larger) new sampling rate
+    
+    input parameters:
+      rri                 : the input RRI data
+      sampling_rate       : the output sampling rate (default 20)
+      rri_sampling_rate   : the RRI sampling rate (default 1000)
+      data_length         : how long the output will be (-1 for all data)
+    returns:
+      rri
+    '''
+    if (data_length==-1): 
+        data_length = (int)(numpy.size(rri)*sampling_rate/rri_sampling_rate)
+    
+    rri_new = numpy.zeros(data_length, dtype=float)
+    for i in numpy.arange(numpy.size(rri)-1):
+        rri_new[(int)(i*sampling_rate/rri_sampling_rate):int((i+1)*sampling_rate/rri_sampling_rate)] = rri[i]  # in milliseconds
+    return rri_new
+
+
+
 # cleans RRI data 
 # NBG, 2024/03/20
 def clean_RRI(x):
+    ''' clean RRI data by removing spurious ou duplicated values
+    '''
     y = x.copy()
     Npts = y.size
     for i in numpy.arange(Npts-1):
@@ -89,18 +145,59 @@ def clean_RRI(x):
 # this function does not touch the data x (HR) but returns a mask where it thinks values are correct   
 # the default values are fine for an adult (mother), but not for a foetus: use parameters to adapt.
 # input parameters:
-#    x        : the HR data
+#    x        : the HR data in bpm
 #    HR_min   : the minimum acceptable value for HR (default 40bpm)
 #    HR_max   : the maximum acceptable value for HR (default 180bpm)
 # returns:
 #    a mask     
 def mask_HR(x, HR_min=40, HR_max=180):
+    ''' # examines HR data for erratic values
+    this function does not touch the data x (HR) but returns a mask where it thinks values are correct   
+    the default values are fine for an adult (mother), but not for a foetus: adapt parameters for foetus.
+
+    input parameters:
+      x        : the HR data in bpm
+      HR_min   : the minimum acceptable value for HR (default 40bpm)
+      HR_max   : the maximum acceptable value for HR (default 180bpm)
+    returns:
+      a mask     
+    '''
     mask = numpy.ones(x.shape, dtype='int8')
     bad_ind = numpy.where((x>HR_max) | (x<HR_min))
     mask[bad_ind]=0
     
     return mask
 
+
+
+# examines RRI data for erratic values
+# NBG, 2024/08/29            
+# this function does not touch the data x (input RRI) but returns a mask where it thinks values are correct   
+# the default values are fine for an adult (mother), but not for a foetus: use parameters to adapt.
+# input parameters:
+#    x        : the RRI data in milliseconds
+#    RRI_min  : the minimum acceptable value for RRI (default 333 ms, ie 180 bpm)
+#    RRI_max  : the maximum acceptable value for HR (default 1500 ms, ie 40 bpm)
+# returns:
+#    a mask     
+def mask_RRI(x, RRI_min=333, RRI_max=1500):
+    ''' examines RRI data for erratic values
+    this function does not touch the data x (input RRI) but returns a mask where it thinks values are correct   
+    the default values are fine for an adult (mother), but not for a foetus: use parameters to adapt.
+    
+    input parameters:
+      x        : the RRI data in milliseconds
+      RRI_min  : the minimum acceptable value for RRI (default 333 ms, ie 180 bpm)
+      RRI_max  : the maximum acceptable value for HR (default 1500 ms, ie 40 bpm)
+    returns:
+      a mask  
+    '''
+    mask = numpy.ones(x.shape, dtype='int8')
+    bad_ind = numpy.where((x>RRI_max) | (x<RRI_min))
+    mask[bad_ind]=0
+    
+    return mask
+    
 
 
 # this usefull function insures that the time dimension is the first dimension
@@ -144,16 +241,17 @@ def reorder(x):
 #
 def filter_FIR(data, tau_LP, f_resampling=1, mask=None, mask_strict=False, return_time=False):
     ''' low pass filter signal(s) along time (and return a well-ordered 2-d array)
-        this improves the dynamics (in terms of nb of non-redondant points)
-        and this reduces the signal size (so better for ANN algorithms)
+    this improves the dynamics (in terms of nb of non-redondant points)
+    and this reduces the signal size (so better for ANN algorithms)
 
-        data         : 1-d or 2-d array with the data
-        tau_LP       : (int) nb of pts to average
-        f_resampling : (int) how many point per set of tau_LP to keep (oversampling)
-        mask         : (bool) use only values given in array mask
-        mask_strict  : (bool) False : the nb of NaN is reduced (default)
-                              True  : the nb of NaN is increased over all perturbed measurements
-        return_time  : (bool) return an extra array with corresponding times for filtered data
+    input parameters:
+      data         : 1-d or 2-d array with the data
+      tau_LP       : (int) nb of pts to average
+      f_resampling : (int) how many point per set of tau_LP to keep (oversampling)
+      mask         : (bool) use only values given in array mask
+      mask_strict  : (bool) False : the nb of NaN is reduced (default)
+                            True  : the nb of NaN is increased over all perturbed measurements
+      return_time  : (bool) return an extra array with corresponding times for filtered data
     '''
     signals = reorder(data)        
     Npts = signals.shape[1] # along time
