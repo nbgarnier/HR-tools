@@ -1,37 +1,47 @@
 # -*- coding: ascii -*-
+# version 2026-02-19
 import numpy
-
 
 # compute RRI signal from a series of peaks timestamps    
 # NBG, 2021/10/05
 # input parameters:
 #    peaks           : contains peaks timestamps
 #    sampling_rate   : the sampling rate of peaks 
+#    unit            : 's' for seconds, or "ms" (default) for milliseconds (new 2025/10/20)
 #    data_length     : max size (in time) of the output
+#    do_clean        : (boolean) removes spurious zeros at the beginning
 #    do_interpolate  : (boolean) returns a RRI with a constant sampling rate
 # returns:
 #     RRI     (either time-driven or with constant sampling, depending on "do_interpolate")
-def peaks_to_RRI(peaks, sampling_rate=1000, data_length=-1, interpolate=False):
+#             RRI unit is either 's' or 'ms' depending on the parameter chosen
+def peaks_to_RRI(peaks, sampling_rate=1000, unit="ms", data_length=-1, do_clean=False, do_interpolate=False):
     ''' compute RRI signal from a series of peaks timestamps    
     
     input parameters:
       peaks           : contains peaks timestamps
       sampling_rate   : the sampling rate of peaks 
       data_length     : max size (in time) of the output
-      do_interpolate  : (boolean) returns a RRI with a constant sampling rate
+      do_clean        : (boolean) removes spurious zeros at the beginning (but introduce a time shift)
+                        set it to False if you want to keep original time units from the peaks data,
+                        e.g., to compare with RRI or peaks time-traces (default: False)
+      do_interpolate  : (boolean) returns a RRI with a constant sampling rate (default: False)
     returns:
       RRI     (either time-driven or with constant sampling, depending on "do_interpolate")
     '''
-    if (data_length==-1): data_length = numpy.max(peaks)
     
-    rri = numpy.diff(peaks) / sampling_rate 
-    if interpolate is False:
+    rri = numpy.diff(peaks) / sampling_rate # in seconds
+    if unit=="ms":
+        rri = rri * 1000
+    if do_interpolate is False:
         return rri
     else:
+        if (data_length==-1): 
+            if do_clean is True: peaks = peaks-peaks[0]
+            data_length = numpy.max(peaks) # same as peaks[-1]
         RRI = numpy.zeros(data_length, dtype=float)
         
         for i in numpy.arange(peaks.size-1):
-            RRI[peaks[i]:peaks[i+1]] = rri[i]  # in seconds
+            RRI[peaks[i]:peaks[i+1]] = rri[i]  # in seconds or milliseconds
        
         return RRI
 
@@ -41,25 +51,32 @@ def peaks_to_RRI(peaks, sampling_rate=1000, data_length=-1, interpolate=False):
 # NBG, 2021/10/05
 #    peaks          : array of indexes where a peak is observed/measured
 #    sampling_rate  : obvious, in Hertz
-#    data_length    : max size (in time) of the output
+#    data_length    : max size (in time) of the output, removed 2025/10/20, and replaced with parameter below:
+#    do_clean       : (boolean) removes spurious zeros at the beginning (default True)
+#                      set it to False if you want to keep original time units from the peaks data,
+#                      e.g., to compare with RRI or peaks time-traces
 # returns: 
 #    HR, an array (of appropriate length) with the HR signal, in bpm, and with constant sampling frequency
-def peaks_to_HR(peaks, sampling_rate=1000, data_length=-1):
+def peaks_to_HR(peaks, sampling_rate=1000, do_clean=True):
     ''' compute HR signal from a series of peaks timestamps
     
     input parameters:
       peaks          : array of indexes where a peak is observed/measured
-      sampling_rate  : obvious, in Hertz
-      data_length    : max size (in time) of the output
+      sampling_rate  : of the peaks data, in Hertz
+      do_clean       : (boolean) removes spurious zeros at the beginning (default True)
+                       set it to False if you want to keep original time units from the peaks data,
+                       e.g., to compare with RRI or peaks time-traces
     returns: 
       HR, an array (of appropriate length) with the HR signal, in bpm, and with constant sampling frequency
+      equal to the sampling frequency of the peaks
     '''
-    if (data_length==-1): data_length = numpy.max(peaks)
+    if do_clean==True: peaks = peaks-peaks[0]   # shift the time axis
+    data_length = numpy.max(peaks) # same as peaks[-1]
     rri = numpy.diff(peaks)/sampling_rate
     
     hr = numpy.zeros(data_length, dtype=float)
     for i in numpy.arange(peaks.size-1):
-        hr[peaks[i]:peaks[i+1]] = 60/rri[i]  # in bpm
+        hr[peaks[i]:peaks[i+1]] = 60/rri[i] if rri[i]>0 else numpy.nan # in bpm
     return hr
 
 
@@ -72,23 +89,26 @@ def peaks_to_HR(peaks, sampling_rate=1000, data_length=-1):
 #    data_length         : how long the output will be (-1 for all data)
 # returns:
 #    HR  
-def RRI_to_HR(rri, sampling_rate=20, rri_sampling_rate=1000, data_length=-1):
+def RRI_to_HR(rri, sampling_rate=20, rri_sampling_rate=1000, rri_unit="ms", data_length=-1):
     ''' converts RRI data into HR data
     
     input parameters:
       rri                 : the RRI data
-      sampling_rate       : the HR (output) sampling rate (default 20)
-      rri_sampling_rate   : the RRI sampling rate (default 1000)
+      sampling_rate       : the HR (output) sampling rate (in Hz, default 20)
+      rri_sampling_rate   : the RRI sampling rate (in Hz, default 1000)
+      rri_unit            : unit in which the RRi is expressed (default 'ms')
       data_length         : how long the output will be (-1 for all data)
     returns:
-      HR, sampled at sampling_rate
+      HR, in bpm, sampled at sampling_rate
     '''
     if (data_length==-1): 
         data_length = (int)(numpy.size(rri)*sampling_rate/rri_sampling_rate)
     
+    if rri_unit=="ms":    # added 2025/10/20
+        rri = rri/1000    # in seconds
     hr = numpy.zeros(data_length, dtype=float)
     for i in numpy.arange(numpy.size(rri)-1):
-        hr[(int)(i*sampling_rate/rri_sampling_rate):int((i+1)*sampling_rate/rri_sampling_rate)] = 60*1000/rri[i]  # in bpm
+        hr[(int)(i*sampling_rate/rri_sampling_rate):int((i+1)*sampling_rate/rri_sampling_rate)] = 60/rri[i]  # in bpm
     return hr
 
 
@@ -127,6 +147,8 @@ def RRI_to_RRI(rri, sampling_rate=20, rri_sampling_rate=1000, data_length=-1):
 # NBG, 2024/03/20
 def clean_RRI(x):
     ''' clean RRI data by removing spurious ou duplicated values
+
+    this function is aimed to be used with Bittium device RRI data (labeled "HR" but RRI)
     '''
     y = x.copy()
     Npts = y.size
@@ -137,7 +159,30 @@ def clean_RRI(x):
 #            if (i<50): print(i, j)
             y[i:j] = x[j]
     return y
-        
+
+
+
+def check_HR(x, HR_min=40, HR_max=180):
+    ''' examines HR data for erratic values
+    this function does not touch the data x (HR) but returns a new array with only correct values 
+    and NaNs where values are not correct
+    the default values are fine for an adult (mother), but not for a foetus: adapt parameters for foetus.
+
+    input parameters:
+      x        : the HR data in bpm
+      HR_min   : the minimum acceptable value for HR (default 40bpm)
+      HR_max   : the maximum acceptable value for HR (default 180bpm)
+    returns:
+      a checked version of x    
+    '''
+    y = x.copy()
+
+    # check for bad values:
+    bad_ind = numpy.where((x>HR_max) | (x<HR_min))
+    y[bad_ind] = numpy.nan
+
+    return y
+
 
 
 # examines HR data for erratic values
@@ -150,8 +195,10 @@ def clean_RRI(x):
 #    HR_max   : the maximum acceptable value for HR (default 180bpm)
 # returns:
 #    a mask     
-def mask_HR(x, HR_min=40, HR_max=180):
-    ''' # examines HR data for erratic values
+#
+# 2025/10/20: now checkling for NaNs
+def mask_HR(x, HR_min=40, HR_max=180, do_check_bad_values=True):
+    ''' examines HR data for erratic values
     this function does not touch the data x (HR) but returns a mask where it thinks values are correct   
     the default values are fine for an adult (mother), but not for a foetus: adapt parameters for foetus.
 
@@ -163,9 +210,16 @@ def mask_HR(x, HR_min=40, HR_max=180):
       a mask     
     '''
     mask = numpy.ones(x.shape, dtype='int8')
-    bad_ind = numpy.where((x>HR_max) | (x<HR_min))
-    mask[bad_ind]=0
     
+    # check for bad values:
+    if do_check_bad_values:
+        bad_ind = numpy.where((x>HR_max) | (x<HR_min))
+        mask[bad_ind]=0
+
+    # check for NaN of Inf:
+    wrong_ind = numpy.where(numpy.isnan(x))
+    mask[wrong_ind]=0
+
     return mask
 
 
@@ -263,7 +317,7 @@ def filter_FIR(data, tau_LP, f_resampling=1, mask=None, mask_strict=False, retur
         else:                   return data
     
     if isinstance(mask, numpy.ndarray):
-        bad_ind = numpy.where(mask==0)  # mask = 0 if data is mmissing
+        bad_ind = numpy.where(mask==0)  # mask = 0 if data is missing
         signals[:,bad_ind] = numpy.nan  # => we put a NaN there
     
 #    print(Npts, "->", (Npts*f_resampling)//tau_LP, "pts in time")
@@ -282,7 +336,7 @@ def filter_FIR(data, tau_LP, f_resampling=1, mask=None, mask_strict=False, retur
                 signals_LP[i,j:Npts_decimated*f_resampling:f_resampling] = numpy.nanmean(tmp, axis=1)
 #        print("%2d : %3d -> %5d non-duplicates" %(i, count_non_duplicates(signals[i,:]), count_non_duplicates(signals_LP[i,:])))
     
-    if (return_time==True): return signals_LP[:,:-tau_LP+1], numpy.arange(Nout)*tau_LP/f_resampling+(tau_LP-1)//2
+    if (return_time==True): return signals_LP[:,:-tau_LP+1], (numpy.arange(Nout)*tau_LP/f_resampling+(tau_LP-1)//2)
     else:                   return signals_LP[:,:-tau_LP+1]
 
 

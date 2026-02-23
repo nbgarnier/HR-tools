@@ -1,4 +1,5 @@
 # -*- coding: ascii -*-
+# version 2026-02-19
 import numpy as np
 import HR_tools as HRt
 import entropy.entropy as entropy
@@ -20,8 +21,9 @@ import entropy.tools as tools
 # h, h_std (the std), h_bias (the bias)
 # h0 (the entropy normalization due to the standard deviation)
 #
-# N.B.G. 2024/04/05
-def compute_HR_entropy_rate(data, stride_values, mask=None, N_shuffles=0, do_filter=False, fs_in=1000, fs_out=20):
+# N.B.G. 2024/04/05, edited 2025/10/22
+def compute_HR_entropy_rate(data, stride_values, mask=None, 
+                            N_shuffles=0, do_filter=False, fs_in=1000, fs_out=20, verbosity=1):
     ''' compute entropy rate of (HR or any type of) data, over a range of time-scales
 
     input parameters:
@@ -42,7 +44,7 @@ def compute_HR_entropy_rate(data, stride_values, mask=None, N_shuffles=0, do_fil
     s = data.shape
     if len(s)==1: x = tools.reorder(data)
     else:         x = tools.reorder(data[0])   
-    
+
     h     =np.zeros(stride_values.shape, dtype=float)
     h_std =np.zeros(stride_values.shape, dtype=float)
     h_bias=np.zeros(stride_values.shape, dtype=float)
@@ -52,36 +54,45 @@ def compute_HR_entropy_rate(data, stride_values, mask=None, N_shuffles=0, do_fil
     for stride in stride_values:   
         # filtering 
         if (do_filter==True):
-            fs_in = fs
-            fs_out= fs
+#            fs_in = fs
+#            fs_out= fs
             if isinstance(mask, np.ndarray):
                 data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride, mask=mask)
-                mask = mask[(stride-1)//2:(-stride+1)//2]
+#                mask2 = mask[(stride-1)//2:(-stride+1)//2]
+                mask2 = HRt.mask_HR(data2, do_check_bad_values=False)   # 2026-02-18, added parameter "do_check_bad_values"
+                                                    # and set it to False to de-activate checking for bad values,
+                                                    # because if data is normalized, values are completely off
             else:
                 data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride)
-#            print("stride", stride, x.shape, "vs", data2.shape)
-            x = data2.copy()
-        std = np.std(x)
+                mask2 = mask
+            if (verbosity>1):
+                print("stride", stride, "initial data shape", x.shape, "filtered into", data2.shape, "with", np.sum(mask2), "good values")
+        else:
+            data2 = x 
+            mask2 = mask
+        std = np.std(x)     # should be nanmean !!!
         h0[i] = np.log(std)
           
         if isinstance(mask, np.ndarray):
-            h[i]   = entropy.compute_entropy_rate(x, stride=stride, mask=mask)
+            if (verbosity>1): 
+                print("using masked data of shape", data2.shape, "with mask of shape", mask2.shape )
+            h[i]   = entropy.compute_entropy_rate(data2, stride=stride, mask=mask2[0,:])
         else:
-            h[i]   = entropy.compute_entropy_rate(x, stride=stride)
+            h[i]   = entropy.compute_entropy_rate(data2, stride=stride)
                 
         [h_std[i]] = entropy.get_last_info()[:1]
     
-        # bias estimate with shuffling:
+        # bias estimate with shuffling: cannot work with masking!!!
         if (N_shuffles>0):
             for i_shuffle in np.arange(N_shuffles):
-                x_shuffled = entropy.surrogate(x)
+                x_shuffled = entropy.surrogate(data2)
         
-                if isinstance(mask, np.ndarray):
-                    h_bias[i]+=entropy.compute_entropy_rate(x_shuffled, stride=stride, mask=mask)
-                    h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride, mask=mask)
+                if isinstance(mask2, np.ndarray):
+                    h_bias[i]+=entropy.compute_entropy_rate(x_shuffled, stride=stride, mask=mask2)
+#                    h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride, mask=mask2)
                 else:
                     h_bias[i]+=entropy.compute_entropy_rate(x_shuffled, stride=stride)
-                    h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride)
+#                    h_bias[i]-=entropy.compute_entropy(x_shuffled, stride=stride)
 
             h_bias[i]/=N_shuffles
             
@@ -114,6 +125,9 @@ def compute_window_HR_entropy_rate(data, stride, T=300, overlap=0, fs=20, mask=N
       overlap   : the overlap between 2 consecutive windows (in points)
       fs        : the sampling frequency (Hz) for data
       N_shuffles: nb of shuffles to perform and average over (default=0)
+      do_what   : "entropy" for entropy rate
+                  "complex" for ApEn and SampEn
+                  "std"  
       do_return_time : if ==1, then returns an extra vector with timestamps of the centers of time windows
     
     returns 3 arrays in the following order:
@@ -143,7 +157,7 @@ def compute_window_HR_entropy_rate(data, stride, T=300, overlap=0, fs=20, mask=N
         fs_out= fs
         if isinstance(mask, np.ndarray):
             data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride, mask=mask)
-            mask = mask[(stride-1)//2:(-stride+1)//2]
+            mask = mask[(stride-1)//2:(-stride+1)//2] # 2025/10/22: works only if no resampling (ie fs_in=fs_out)
         else:
             data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride)
         x = data2.copy()
@@ -214,5 +228,118 @@ def compute_window_HR_entropy_rate(data, stride, T=300, overlap=0, fs=20, mask=N
     
     return returned_variables
 
+
+
+# to compute ApEn and SampEn from HR data, over a range of time-scales
+# data      : a 1d numpy array with the data
+# stride    : array of stride values to consider
+# N_shuffles: nb of shuffles to perform and average over (default=0)
+# do_filter : filter (FIR) the signal or not
+# fs_in     : sampling frequency of input data
+#             fs_in = 1000 for ECG-derived HR
+#             fs_in = 5    for device produced RRI, and infered HR
+# fs_out    : effective sampling frequency after filtering
+#             fs_out = 20 is a good compromise to have enough points
+#
+# returns 3 or 4 arrays in the following order:
+# h, h_std (the std), h_bias (the bias)
+# h0 (the entropy normalization due to the standard deviation)
+#
+# N.B.G. 2025/11/04
+def compute_HR_complexities(data, stride_values, mask=None, 
+                            N_shuffles=0, do_filter=False, fs_in=1000, fs_out=20, verbosity=1):
+    ''' compute entropy rate of (HR or any type of) data, over a range of time-scales
+
+    input parameters:
+      data      : a 1d numpy array with the data
+      stride    : array of stride values (timescales) to consider (in points)
+      N_shuffles: nb of shuffles to perform and average over (default=0)
+      do_filter : filter (FIR) the signal or not
+      fs_in     : sampling frequency of input data
+                  fs_in = 1000 for ECG-derived HR
+                  fs_in = 5    for device produced RRI, and infered HR
+      fs_out    : effective sampling frequency after filtering
+                  fs_out = 20 is a good compromise to have enough points
+
+    returns 4 arrays in the following order:
+      h, h_std (the std), h_bias (the bias) and h0 (the entropy normalization due to the standard deviation)
+    '''
+    
+    s = data.shape
+    if len(s)==1: x = tools.reorder(data)
+    else:         x = tools.reorder(data[0])   
+    
+    AE     =np.zeros(stride_values.shape, dtype=float)
+    AE_std =np.zeros(stride_values.shape, dtype=float)
+    AE_bias=np.zeros(stride_values.shape, dtype=float)
+    SE     =np.zeros(stride_values.shape, dtype=float) 
+    SE_std =np.zeros(stride_values.shape, dtype=float)
+    SE_bias=np.zeros(stride_values.shape, dtype=float)
+    
+    i=0
+    for stride in stride_values:   
+        # filtering 
+        if (do_filter==True):
+#            fs_in = fs
+#            fs_out= fs
+            if isinstance(mask, np.ndarray):
+                data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride, mask=mask)
+#                mask2 = mask[(stride-1)//2:(-stride+1)//2]
+                mask2 = HRt.mask_HR(data2, do_check_bad_values=False)   
+            else:
+                data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride)
+                mask2 = mask
+            if (verbosity>1):
+                print("stride", stride, "initial data shape", x.shape, "filtered into", data2.shape, "with", np.sum(mask2), "good values")
+        else:
+            data2 = x 
+            mask2 = mask
+        std = np.std(x)     # should be nanmean !!!
+          
+        if isinstance(mask, np.ndarray):
+            if (verbosity>1): 
+                print("using masked data of shape", data2.shape, "with mask of shape", mask2.shape )
+            ApEn, SampEn = entropy.compute_complexities(data2, stride=stride, mask=mask2[0,:])
+        else:
+            ApEn, SampEn = entropy.compute_complexities(data2, stride=stride)
+        
+        AE[i] = ApEn[-1]
+        SE[i] = SampEn[-1]
+        [AE_std[i]] = entropy.get_last_info()[:1]
+        [SE_std[i]] = entropy.get_last_info()[1:2]
+    
+        # bias estimate with shuffling: cannot work with masking!!!
+        if (N_shuffles>0):
+            for i_shuffle in np.arange(N_shuffles):
+                x_shuffled = entropy.surrogate(data2)
+        
+                if isinstance(mask2, np.ndarray):
+                     ApEn, SampEn = entropy.compute_complexities(x_shuffled, stride=stride, mask=mask2)
+                else:
+                    h_bias[i]+=entropy.compute_complexities(x_shuffled, stride=stride)
+                AE_bias[i] += ApEn[-1] 
+                SE_bias[i] += SampEn[-1] 
+            
+            AE_bias[i] /=N_shuffles
+            SE_bias[i] /=N_shuffles
+            
+        i+=1
+    
+    return AE, SE, AE_std, SE_std, AE_bias, SE_bias
+
+
+
+
+# average over a band of time-scales values:
+# x             the quantity to be averaged
+# timescale     the set of available timescales (in points, not in seconds)
+# fs            the sampling rate (to convert timescales from points to seconds)
+# t_min, t_max  the bounds of the time-interval to use
+def time_average(x, timescale, fs, t_min=0.5, t_max=2.5):
+    t           = timescale/fs  # timescales in seconds
+    index_range = np.array(np.where((t_min<=t) & (t<=t_max)))
+    mean        = x[:,index_range[0]]   # retain only a band of lags
+    
+    return mean
 
 
