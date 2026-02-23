@@ -9,19 +9,24 @@ this set of files provides Python functions to read and format properly HR data,
 either event-driven (R-peaks times) or sampled at a fixed frequency (ECG, RRI or HR).
 
 # usage
-import the module(s) as wanted, to use the function(s) 
+import the module(s) as wanted, to use the corresponding function(s). See the quick description below.
 
-- ECG_tools : functions to manipulate ECG data and extract peaks timestamps (using NeuroKit 2)
-- HR_tools  : functions to manipulate peaks timestamps and RRI / HR (convert peaks to RRI or HR)
-- HR_load, HR_load_Felicity : functions to load data from the Felicity 1 and Felicity 2 databases
 
 # file HR_tools.py
 
-routines to convert peaks data into RRI or HR data, and to detect physiologicaly relevant values (and exclude non-physiologicaly relevant ones)
+routines to convert peaks timestamps data into RRI or HR data, and to detect physiologicaly relevant values (and exclude non-physiologicaly relevant ones)
 
 # file HR_entropy.py
 
 routines to compute multi-scale entropies (mainly differrential entropy rate, and usual complexities (ApEn and SampEn: Approximate and Sample Entropies), as a function of a provided vector of time-scales.
+
+# file ECG_tools.py
+
+functions to manipulate ECG data and extract peaks timestamps (using NeuroKit 2). Note that these functions have been somehow deprecated and other repositories offer better extraction of R-peaks from an ECG dataset.
+
+# files HR_load.py and HR_load_Felicity 
+
+functions to load data from the Felicity 1 and Felicity 2 databases.
 
 # examples
 
