@@ -15,6 +15,14 @@ import the module(s) as wanted, to use the function(s)
 - HR_tools  : functions to manipulate peaks timestamps and RRI / HR (convert peaks to RRI or HR)
 - HR_load, HR_load_Felicity : functions to load data from the Felicity 1 and Felicity 2 databases
 
+# file HR_tools.py
+
+routines to convert peaks data into RRI or HR data, and to detect physiologicaly relevant values (and exclude non-physiologicaly relevant ones)
+
+# file HR_entropy.py
+
+routines to compute multi-scale entropies (mainly differrential entropy rate, and usual complexities (ApEn and SampEn: Approximate and Sample Entropies), as a function of a provided vector of time-scales.
+
 # examples
 
 in the directory examples/ are several example Jupyter notebooks:
