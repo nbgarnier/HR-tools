@@ -22,15 +22,21 @@ import entropy.tools as tools
 # h0 (the entropy normalization due to the standard deviation)
 #
 # N.B.G. 2024/04/05, edited 2025/10/22
+# 2026/05/26 : new parameter cutoff_timescale (for experimenting)
 def compute_HR_entropy_rate(data, stride_values, mask=None, 
-                            N_shuffles=0, do_filter=False, fs_in=1000, fs_out=20, verbosity=1):
+                            N_shuffles=0, do_filter=False, cutoff_timescale=1,
+                            fs_in=1000, fs_out=20, verbosity=1):
     ''' compute entropy rate of (HR or any type of) data, over a range of time-scales
 
     input parameters:
-      data      : a 1d numpy array with the data
+      data      : a 1d NumPy array containing the data
       stride    : array of stride values (timescales) to consider (in points)
       N_shuffles: nb of shuffles to perform and average over (default=0)
       do_filter : filter (FIR) the signal or not
+      cutoff_timescale : an integer to give the ratio stride/tau_LP for the filtering cutoff tau_LP,
+                    i.e., the nb of pts that are averaged is given by tau_LP = stride / cutoff_timescale
+                    (default 1, i.e., tau_LP = stride)
+                    Experiment: set it to 2 to filter "less" and see the effect.
       fs_in     : sampling frequency of input data
                   fs_in = 1000 for ECG-derived HR
                   fs_in = 5    for device produced RRI, and infered HR
@@ -56,27 +62,30 @@ def compute_HR_entropy_rate(data, stride_values, mask=None,
         if (do_filter==True):
 #            fs_in = fs
 #            fs_out= fs
+            tau_LP = stride // cutoff_timescale # added 2026/05/26
+            if (tau_LP<1): tau_LP = 1
             if isinstance(mask, np.ndarray):
-                data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride, mask=mask)
+                data2 = HRt.filter_FIR(x, tau_LP*fs_in//fs_out, f_resampling=tau_LP, mask=mask)
 #                mask2 = mask[(stride-1)//2:(-stride+1)//2]
                 mask2 = HRt.mask_HR(data2, do_check_bad_values=False)   # 2026-02-18, added parameter "do_check_bad_values"
                                                     # and set it to False to de-activate checking for bad values,
                                                     # because if data is normalized, values are completely off
+                mask2 = mask2[0,:]
             else:
-                data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride)
+                data2 = HRt.filter_FIR(x, tau_LP*fs_in//fs_out, f_resampling=tau_LP)
                 mask2 = mask
             if (verbosity>1):
-                print("stride", stride, "initial data shape", x.shape, "filtered into", data2.shape, "with", np.sum(mask2), "good values")
+                print("stride", stride, "tau_LP", tau_LP, "initial data shape", x.shape, "filtered into", data2.shape, "with", np.sum(mask2), "good values")
         else:
             data2 = x 
             mask2 = mask
-        std = np.std(x)     # should be nanmean !!!
+        std = np.nanstd(x)     # 2026-05-12: replaced std by nanstd
         h0[i] = np.log(std)
           
         if isinstance(mask, np.ndarray):
             if (verbosity>1): 
                 print("using masked data of shape", data2.shape, "with mask of shape", mask2.shape )
-            h[i]   = entropy.compute_entropy_rate(data2, stride=stride, mask=mask2[0,:])
+            h[i]   = entropy.compute_entropy_rate(data2, stride=stride, mask=mask2)
         else:
             h[i]   = entropy.compute_entropy_rate(data2, stride=stride)
                 
@@ -247,7 +256,8 @@ def compute_window_HR_entropy_rate(data, stride, T=300, overlap=0, fs=20, mask=N
 #
 # N.B.G. 2025/11/04
 def compute_HR_complexities(data, stride_values, mask=None, 
-                            N_shuffles=0, do_filter=False, fs_in=1000, fs_out=20, verbosity=1):
+                            N_shuffles=0, do_filter=False, cutoff_timescale=1,
+                            fs_in=1000, fs_out=20, verbosity=1):
     ''' compute entropy rate of (HR or any type of) data, over a range of time-scales
 
     input parameters:
@@ -255,6 +265,10 @@ def compute_HR_complexities(data, stride_values, mask=None,
       stride    : array of stride values (timescales) to consider (in points)
       N_shuffles: nb of shuffles to perform and average over (default=0)
       do_filter : filter (FIR) the signal or not
+      cutoff_timescale : an integer to give the ratio stride/tau_LP for the filtering cutoff tau_LP,
+                    i.e., the nb of pts that are averaged is given by tau_LP = stride / cutoff_timescale
+                    (default 1, i.e., tau_LP = stride)
+                    Experiment: set it to 2 to filter "less" and see the effect.
       fs_in     : sampling frequency of input data
                   fs_in = 1000 for ECG-derived HR
                   fs_in = 5    for device produced RRI, and infered HR
@@ -282,26 +296,30 @@ def compute_HR_complexities(data, stride_values, mask=None,
         if (do_filter==True):
 #            fs_in = fs
 #            fs_out= fs
+            tau_LP = stride // cutoff_timescale # added 2026/05/26
+            if (tau_LP<1): tau_LP = 1
             if isinstance(mask, np.ndarray):
-                data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride, mask=mask)
+                data2 = HRt.filter_FIR(x, tau_LP*fs_in//fs_out, f_resampling=tau_LP, mask=mask)
 #                mask2 = mask[(stride-1)//2:(-stride+1)//2]
                 mask2 = HRt.mask_HR(data2, do_check_bad_values=False)   
+                mask2 = mask2[0,:]
             else:
-                data2 = HRt.filter_FIR(x, stride*fs_in//fs_out, f_resampling=stride)
+                data2 = HRt.filter_FIR(x, tau_LP*fs_in//fs_out, f_resampling=tau_LP)
                 mask2 = mask
             if (verbosity>1):
-                print("stride", stride, "initial data shape", x.shape, "filtered into", data2.shape, "with", np.sum(mask2), "good values")
+                print("stride", stride, "tau_LP", tau_LP, "initial data shape", x.shape, "filtered into", data2.shape, "with", np.sum(mask2), "good values")
         else:
             data2 = x 
             mask2 = mask
-        std = np.std(x)     # should be nanmean !!!
+#        std = np.nanstd(x)     # 2026-05-12: replaced std by nanstd
           
         if isinstance(mask, np.ndarray):
             if (verbosity>1): 
                 print("using masked data of shape", data2.shape, "with mask of shape", mask2.shape )
-            ApEn, SampEn = entropy.compute_complexities(data2, stride=stride, mask=mask2[0,:])
+            ApEn, SampEn = entropy.compute_complexities(data2, stride=stride, mask=mask2)
         else:
             ApEn, SampEn = entropy.compute_complexities(data2, stride=stride)
+#            print("for stride=", stride, "ApEn :", ApEn, "SampEn :", SampEn)
         
         AE[i] = ApEn[-1]
         SE[i] = SampEn[-1]
@@ -314,9 +332,9 @@ def compute_HR_complexities(data, stride_values, mask=None,
                 x_shuffled = entropy.surrogate(data2)
         
                 if isinstance(mask2, np.ndarray):
-                     ApEn, SampEn = entropy.compute_complexities(x_shuffled, stride=stride, mask=mask2)
+                    ApEn, SampEn = entropy.compute_complexities(x_shuffled, stride=stride, mask=mask2)
                 else:
-                    h_bias[i]+=entropy.compute_complexities(x_shuffled, stride=stride)
+                    ApEn, SampEn = entropy.compute_complexities(x_shuffled, stride=stride)
                 AE_bias[i] += ApEn[-1] 
                 SE_bias[i] += SampEn[-1] 
             

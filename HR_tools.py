@@ -193,10 +193,11 @@ def check_HR(x, HR_min=40, HR_max=180):
 #    x        : the HR data in bpm
 #    HR_min   : the minimum acceptable value for HR (default 40bpm)
 #    HR_max   : the maximum acceptable value for HR (default 180bpm)
+#    do_check_bad_values : if True, the mask will ignore HR values outisde the range [HR_min; HR_max]
 # returns:
 #    a mask     
 #
-# 2025/10/20: now checkling for NaNs
+# 2025/10/20: now checking for NaNs
 def mask_HR(x, HR_min=40, HR_max=180, do_check_bad_values=True):
     ''' examines HR data for erratic values
     this function does not touch the data x (HR) but returns a mask where it thinks values are correct   
@@ -206,8 +207,12 @@ def mask_HR(x, HR_min=40, HR_max=180, do_check_bad_values=True):
       x        : the HR data in bpm
       HR_min   : the minimum acceptable value for HR (default 40bpm)
       HR_max   : the maximum acceptable value for HR (default 180bpm)
+      do_check_bad_values : a boolean (default=True). 
+                 If True, the mask will ignore HR values outside the range [HR_min; HR_max]
+                 If False, the mask will only ignore NaNs
+
     returns:
-      a mask     
+      a mask for the data x (with 1 for a good value and 0 for a bad value)
     '''
     mask = numpy.ones(x.shape, dtype='int8')
     
@@ -277,7 +282,7 @@ def reorder(x):
 
    
 # low pass filter signal(s) along time (and return a 2-d array)
-# v2024-04-15, adapted from "causality_tools.py" 
+# 2024-04-15, adapted from "causality_tools.py" 
 # this improves the dynamics (in terms of nb of non-redondant points)
 # and this reduces the signal size (so better for ANN algorithms)
 #
@@ -286,7 +291,7 @@ def reorder(x):
 # f_resampling : how many point per set of tau_LP to keep (oversampling)
 #
 # 2022-10-24 : added parameter f_resampling (old default was indeed 1)
-#            : tested OK (see notebook "causality_couples_2022-10-21_tests_decel")
+#              tested OK (see notebook "causality_couples_2022-10-21_tests_decel")
 # 2024-04-15 : now with parameter mask (and using NaN and nanmean)
 # 2024-04-17 : now returning a correct nb of points (too any before!)
 # 2024-04-19 : parameter mask_strict (default=False):
@@ -295,17 +300,17 @@ def reorder(x):
 #
 def filter_FIR(data, tau_LP, f_resampling=1, mask=None, mask_strict=False, return_time=False):
     ''' low pass filter signal(s) along time (and return a well-ordered 2-d array)
-    this improves the dynamics (in terms of nb of non-redondant points)
-    and this reduces the signal size (so better for ANN algorithms)
+    -> improves the dynamics (in terms of nb of non-redondant points) of piecewise-constant data
+    -> (eventually) reduces the signal size (so better for ANN algorithms)
 
     input parameters:
       data         : 1-d or 2-d array with the data
       tau_LP       : (int) nb of pts to average
-      f_resampling : (int) how many point per set of tau_LP to keep (oversampling)
+      f_resampling : (int) how many points per set of tau_LP to keep (oversampling)
       mask         : (bool) use only values given in array mask
       mask_strict  : (bool) False : the nb of NaN is reduced (default)
                             True  : the nb of NaN is increased over all perturbed measurements
-      return_time  : (bool) return an extra array with corresponding times for filtered data
+      return_time  : (bool) return an extra array with exact timestamps of the filtered data
     '''
     signals = reorder(data)        
     Npts = signals.shape[1] # along time
